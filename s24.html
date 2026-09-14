@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Mini Arcade · S24 Ultra</title>
+  <link rel="manifest" href="manifest-s24.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="s24-mode">
+  <main id="app" class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">GALAXY S24 ULTRA · 19.5:9</p>
+        <h1 id="screenTitle">MINI ARCADE</h1>
+      </div>
+      <div class="top-actions">
+        <button id="pauseBtn" class="icon-btn hidden" type="button" aria-label="일시정지">Ⅱ</button>
+        <button id="homeBtn" class="icon-btn hidden" type="button" aria-label="게임 선택으로 돌아가기">⌂</button>
+      </div>
+    </header>
+    <section id="homeScreen" class="screen active" aria-labelledby="screenTitle">
+      <div class="intro-panel">
+        <div><strong>짧게 한 판.</strong><span>터치 위주 · 무음 · S24 최적화</span></div>
+        <div class="session-badge"><span id="playedCount">0</span> games</div>
+      </div>
+      <div id="gameGrid" class="game-grid"></div>
+      <p class="home-note">S24 Ultra 전용 기록은 이 기기에 별도로 저장됩니다.</p>
+    </section>
+    <section id="gameScreen" class="screen" aria-live="polite">
+      <div class="game-head">
+        <div><p id="gameKicker" class="eyebrow"></p><h2 id="gameName"></h2><p id="gameHelp" class="game-help"></p></div>
+        <div id="gameStats" class="stats"></div>
+      </div>
+      <div id="gameStage" class="game-stage"></div>
+    </section>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>

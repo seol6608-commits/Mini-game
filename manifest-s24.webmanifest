@@ -1,0 +1,11 @@
+{
+  "name":"Mini Arcade · Galaxy S24 Ultra",
+  "short_name":"Arcade S24",
+  "start_url":"./s24.html",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#080c18",
+  "theme_color":"#0b1020",
+  "orientation":"any",
+  "icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

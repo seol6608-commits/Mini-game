@@ -7,10 +7,11 @@ const rand = (min,max) => Math.random()*(max-min)+min;
 const randInt = (min,max) => Math.floor(rand(min,max+1));
 const shuffle = arr => { for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; };
 
+const STORE_PREFIX = document.body.classList.contains('s24-mode') ? 'ma_s24_' : 'ma_';
 const KEYS = {
-  played:'ma_played',
-  r2048:'ma_2048_best', snake:'ma_snake_best', brick:'ma_brick_best', stack:'ma_stack_best',
-  mines:'ma_mines_best', dodge:'ma_dodge_best', memory:'ma_memory_best'
+  played:STORE_PREFIX+'played',
+  r2048:STORE_PREFIX+'2048_best', snake:STORE_PREFIX+'snake_best', brick:STORE_PREFIX+'brick_best', stack:STORE_PREFIX+'stack_best',
+  mines:STORE_PREFIX+'mines_best', dodge:STORE_PREFIX+'dodge_best', memory:STORE_PREFIX+'memory_best'
 };
 const getNum = (k,d=0) => Number(localStorage.getItem(k) ?? d) || d;
 const setNum = (k,v) => localStorage.setItem(k,String(v));
