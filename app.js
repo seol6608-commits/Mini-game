@@ -59,7 +59,7 @@ function canvasScale(canvas, cssW, cssH){
 const games = [
   {id:'g2048', icon:'2048', name:'2048 Mini', desc:'스와이프로 같은 숫자를 합치기', record:()=>`${getNum(KEYS.r2048)} pts`, kicker:'PUZZLE', help:'보드를 스와이프해서 같은 숫자를 합치세요. 2048 이후에도 계속 플레이할 수 있습니다.'},
   {id:'snake', icon:'S', name:'Snake', desc:'먹이를 먹고 길어지는 클래식 스네이크', record:()=>`${getNum(KEYS.snake)} pts`, kicker:'ARCADE', help:'화면 스와이프 또는 방향 버튼으로 이동하세요. 자기 몸이나 벽에 닿으면 끝납니다.'},
-  {id:'brick', icon:'▰', name:'Brick Breaker', desc:'패들을 움직여 벽돌 전부 깨기', record:()=>`${getNum(KEYS.brick)} pts`, kicker:'ARCADE', help:'손가락을 좌우로 움직여 패들을 조작하세요. 공을 놓치기 전에 벽돌을 최대한 많이 깨세요.'},
+  {id:'brick', icon:'▰', name:'Brick Breaker', desc:'60초 안에 벽돌을 최대한 깨기', record:()=>`${getNum(KEYS.brick)} pts`, kicker:'ARCADE', help:'손가락을 좌우로 움직여 패들을 조작하세요. 한 판은 최대 60초이며, 벽돌을 모두 깨면 즉시 끝납니다.'},
   {id:'stack', icon:'▥', name:'Stack Tower', desc:'움직이는 블록을 정확히 쌓기', record:()=>`${getNum(KEYS.stack)} 층`, kicker:'TIMING', help:'화면을 탭해 움직이는 블록을 내려놓으세요. 겹치지 않은 부분은 잘려 나갑니다.'},
   {id:'mines', icon:'✦', name:'Minesweeper', desc:'8×8 보드에서 지뢰 10개 찾기', record:()=>{const v=getNum(KEYS.mines);return v?`${v.toFixed(1)} s`:'—';}, kicker:'PUZZLE', help:'터치하면 칸을 열고, 깃발 모드 또는 길게 누르기로 지뢰를 표시하세요.'},
   {id:'dodge', icon:'◇', name:'Dodge', desc:'내려오는 장애물을 오래 피하기', record:()=>`${getNum(KEYS.dodge)} pts`, kicker:'SURVIVAL', help:'손가락을 좌우로 드래그해 플레이어를 움직이세요. 시간이 지날수록 장애물이 빨라집니다.'},
@@ -108,13 +108,13 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden && activeG
 /* ---------- 2048 ---------- */
 function init2048(){
   let board=Array(16).fill(0), score=0, won=false;
-  setStats(stat('SCORE','0','s2048')+stat('BEST',getNum(KEYS.r2048),'b2048'));
+  setStats(stat('SCORE','0','s2048')+stat('BEST',getNum(KEYS.r2048),'b2048Best'));
   gameStage.innerHTML=`<div class="g2048-wrap"><div id="b2048" class="g2048-board" aria-label="2048 보드"></div>
     <div class="swipe-pad" aria-label="방향 조작"><span class="blank"></span><button data-dir="up">▲</button><span class="blank"></span><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div>
     <div class="button-row"><button id="reset2048" class="secondary-btn" type="button">새 게임</button></div></div>`;
   const el=$('#b2048');
   const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null); if(!free.length)return; board[free[randInt(0,free.length-1)]]=Math.random()<.9?2:4;};
-  const render=()=>{el.innerHTML=board.map(v=>`<div class="g2048-cell ${v?`v${Math.min(v,2048)}`:''}">${v||''}</div>`).join(''); $('#s2048').textContent=score; const best=Math.max(getNum(KEYS.r2048),score); setNum(KEYS.r2048,best); $('#b2048').textContent=best;};
+  const render=()=>{el.innerHTML=board.map(v=>`<div class="g2048-cell ${v?`v${Math.min(v,2048)}`:''}">${v||''}</div>`).join(''); $('#s2048').textContent=score; const best=Math.max(getNum(KEYS.r2048),score); setNum(KEYS.r2048,best); $('#b2048Best').textContent=best;};
   const slideLine=line=>{let a=line.filter(Boolean), gained=0; for(let i=0;i<a.length-1;i++){if(a[i]===a[i+1]){a[i]*=2;gained+=a[i];a.splice(i+1,1);}} while(a.length<4)a.push(0); return [a,gained];};
   const move=dir=>{
     if(paused)return; const old=board.slice(); let gained=0;
@@ -155,20 +155,20 @@ function initSnake(){
 
 /* ---------- Brick Breaker ---------- */
 function initBrick(){
-  setStats(stat('SCORE','0','brickScore')+stat('LIVES','3','brickLives')+stat('BEST',getNum(KEYS.brick),'brickBest'));
+  setStats(stat('SCORE','0','brickScore')+stat('TIME','60','brickTime')+stat('BEST',getNum(KEYS.brick),'brickBest'));
   gameStage.innerHTML=`<div class="canvas-wrap"><canvas id="brickCanvas" class="game-canvas"></canvas><div id="brickOverlay" class="overlay"><div class="overlay-card"><h3>Brick Breaker</h3><p class="subtle">패들을 손가락으로 좌우 이동</p><button id="brickStart" class="primary-btn" type="button">시작</button></div></div></div>`;
   const canvas=$('#brickCanvas'),W=760,H=520,ctx=canvasScale(canvas,W,H),overlay=$('#brickOverlay');
-  let paddle,ball,bricks,lives,score,raf,last,running=false;
-  function makeBricks(){bricks=[];const rows=6,cols=10,gap=7,bw=(W-44-(cols-1)*gap)/cols,bh=24;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)bricks.push({x:22+c*(bw+gap),y:42+r*(bh+gap),w:bw,h:bh,alive:true,row:r});}
-  function resetBall(){ball={x:W/2,y:H-82,r:8,vx:rand(-190,190),vy:-250};if(Math.abs(ball.vx)<90)ball.vx=120;}
+  let paddle,ball,bricks,lives,score,timeLeft,raf,last,running=false;
+  function makeBricks(){bricks=[];const rows=4,cols=8,gap=8,bw=(W-44-(cols-1)*gap)/cols,bh=27;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)bricks.push({x:22+c*(bw+gap),y:48+r*(bh+gap),w:bw,h:bh,alive:true,row:r});}
+  function resetBall(){ball={x:W/2,y:H-82,r:8,vx:rand(-230,230),vy:-320};if(Math.abs(ball.vx)<110)ball.vx=140;}
   function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#080e1b';ctx.fillRect(0,0,W,H);bricks.forEach(b=>{if(!b.alive)return;const colors=['#7f8cff','#7482f2','#6f9edc','#5cc8ca','#5ce0b4','#ffd166'];ctx.fillStyle=colors[b.row];ctx.fillRect(b.x,b.y,b.w,b.h);});ctx.fillStyle='#eef1ff';ctx.fillRect(paddle.x,H-38,paddle.w,12);ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fillStyle='#ff6f8e';ctx.fill();}
-  function end(win){running=false;cancelAnimationFrame(raf);const best=Math.max(getNum(KEYS.brick),score);setNum(KEYS.brick,best);$('#brickBest').textContent=best;overlay.classList.remove('hidden');overlay.innerHTML=`<div class="overlay-card"><h3>${win?'CLEAR!':'GAME OVER'}</h3><p class="subtle">${score}점</p><button id="brickAgain" class="primary-btn" type="button">다시 시작</button></div>`;$('#brickAgain').addEventListener('click',start);}
-  function update(dt){ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;if(ball.x-ball.r<0){ball.x=ball.r;ball.vx=Math.abs(ball.vx)}if(ball.x+ball.r>W){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx)}if(ball.y-ball.r<0){ball.y=ball.r;ball.vy=Math.abs(ball.vy)}
+  function end(win,reason='GAME OVER'){running=false;cancelAnimationFrame(raf);const best=Math.max(getNum(KEYS.brick),score);setNum(KEYS.brick,best);$('#brickBest').textContent=best;overlay.classList.remove('hidden');overlay.innerHTML=`<div class="overlay-card"><h3>${win?'CLEAR!':reason}</h3><p class="subtle">${score}점</p><button id="brickAgain" class="primary-btn" type="button">다시 시작</button></div>`;$('#brickAgain').addEventListener('click',start);}
+  function update(dt){timeLeft=Math.max(0,timeLeft-dt);$('#brickTime').textContent=Math.ceil(timeLeft);if(timeLeft<=0){end(false,'TIME UP');return;}ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;if(ball.x-ball.r<0){ball.x=ball.r;ball.vx=Math.abs(ball.vx)}if(ball.x+ball.r>W){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx)}if(ball.y-ball.r<0){ball.y=ball.r;ball.vy=Math.abs(ball.vy)}
     const py=H-38;if(ball.vy>0&&ball.y+ball.r>=py&&ball.y-ball.r<=py+12&&ball.x>=paddle.x&&ball.x<=paddle.x+paddle.w){const hit=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);ball.vy=-Math.abs(ball.vy)*1.02;ball.vx+=hit*110;ball.y=py-ball.r-1;}
     for(const b of bricks){if(!b.alive)continue;if(ball.x+ball.r>b.x&&ball.x-ball.r<b.x+b.w&&ball.y+ball.r>b.y&&ball.y-ball.r<b.y+b.h){b.alive=false;score+=10;$('#brickScore').textContent=score;ball.vy*=-1;break;}}
-    if(bricks.every(b=>!b.alive)){end(true);return;}if(ball.y-ball.r>H){lives--;$('#brickLives').textContent=lives;if(lives<=0){end(false);return;}resetBall();}}
+    if(bricks.every(b=>!b.alive)){end(true);return;}if(ball.y-ball.r>H){lives--;if(lives<=0){end(false);return;}resetBall();}}
   function loop(t){if(!running)return;if(!paused){const dt=Math.min(.025,(t-last)/1000);last=t;update(dt);draw();}else last=t;raf=requestAnimationFrame(loop);}
-  function start(){paddle={x:W/2-65,w:130};lives=3;score=0;$('#brickScore').textContent='0';$('#brickLives').textContent='3';makeBricks();resetBall();draw();overlay.classList.add('hidden');running=true;last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  function start(){paddle={x:W/2-72,w:144};lives=2;score=0;timeLeft=60;$('#brickScore').textContent='0';$('#brickTime').textContent='60';makeBricks();resetBall();draw();overlay.classList.add('hidden');running=true;last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
   function moveP(e){const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*W;paddle.x=clamp(x-paddle.w/2,0,W-paddle.w);}
   canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture?.(e.pointerId);moveP(e)});canvas.addEventListener('pointermove',e=>{if(e.buttons||e.pointerType==='touch')moveP(e)});$('#brickStart').addEventListener('click',start);makeBricks();paddle={x:W/2-65,w:130};resetBall();draw();cleanupActive=()=>{running=false;cancelAnimationFrame(raf);};
 }
