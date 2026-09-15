@@ -8,7 +8,7 @@
   <title>Mini Arcade · S24 Ultra</title>
   <link rel="manifest" href="manifest-s24.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body class="s24-mode">
   <main id="app" class="app-shell">
@@ -27,6 +27,14 @@
         <div><strong>짧게 한 판.</strong><span>터치 위주 · 무음 · S24 최적화</span></div>
         <div class="session-badge"><span id="playedCount">0</span> games</div>
       </div>
+      <div class="difficulty-bar" aria-label="난이도 선택">
+        <span>난이도</span>
+        <div class="difficulty-options">
+          <button type="button" data-difficulty="easy">쉬움</button>
+          <button type="button" data-difficulty="normal">보통</button>
+          <button type="button" data-difficulty="hard">어려움</button>
+        </div>
+      </div>
       <div id="gameGrid" class="game-grid"></div>
       <p class="home-note">S24 Ultra 전용 기록은 이 기기에 별도로 저장됩니다.</p>
     </section>
@@ -39,6 +47,6 @@
     </section>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="app.js" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>
