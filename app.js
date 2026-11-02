@@ -389,4 +389,4 @@ window.addEventListener('keydown',e=>{
   if(e.key===' '&&activeGame){if(['stack'].includes(activeGame)){e.preventDefault();$('#stackCanvas')?.dispatchEvent(new PointerEvent('pointerdown'));}}
 });
 
-if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=6').catch(()=>{}));}
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=7').catch(()=>{}));}
