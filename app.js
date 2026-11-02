@@ -133,39 +133,53 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden && activeG
 
 /* ---------- 2048 ---------- */
 function init2048(){
-  let board=Array(16).fill(0), score=0, won=false;
+  let board=Array(16).fill(0),score=0,won=false,history=[],mode='none',autoTimer=null,autoOn=false;
   setStats(stat('SCORE','0','s2048')+stat('BEST',getNum(KEYS.r2048),'b2048Best'));
   gameStage.innerHTML=`<div class="g2048-wrap"><div id="b2048" class="g2048-board" aria-label="2048 보드"></div>
     <div class="swipe-pad" aria-label="방향 조작"><span class="blank"></span><button data-dir="up">▲</button><span class="blank"></span><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div>
-    <div class="button-row"><button id="reset2048" class="secondary-btn" type="button">새 게임</button></div></div>`;
-  const el=$('#b2048');
-  const fourChance={easy:.02,normal:.10,hard:.24}[difficulty];
-  const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null); if(!free.length)return; board[free[randInt(0,free.length-1)]]=Math.random()<1-fourChance?2:4;};
-  const render=()=>{el.innerHTML=board.map(v=>`<div class="g2048-cell ${v?`v${Math.min(v,2048)}`:''}">${v||''}</div>`).join(''); $('#s2048').textContent=score; const best=Math.max(getNum(KEYS.r2048),score); setNum(KEYS.r2048,best); $('#b2048Best').textContent=best;};
-  const slideLine=line=>{let a=line.filter(Boolean), gained=0; for(let i=0;i<a.length-1;i++){if(a[i]===a[i+1]){a[i]*=2;gained+=a[i];a.splice(i+1,1);}} while(a.length<4)a.push(0); return [a,gained];};
-  const move=dir=>{
-    if(paused)return; const old=board.slice(); let gained=0;
-    for(let i=0;i<4;i++){
-      let idx=[];
-      if(dir==='left'||dir==='right') idx=[0,1,2,3].map(c=>i*4+c); else idx=[0,1,2,3].map(r=>r*4+i);
-      if(dir==='right'||dir==='down') idx.reverse();
-      const [vals,g]=slideLine(idx.map(k=>board[k])); gained+=g; idx.forEach((k,j)=>board[k]=vals[j]);
-    }
-    if(board.some((v,i)=>v!==old[i])){score+=gained;addTile();render(); if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');} if(!canMove())showToast('게임 오버 · 새 게임을 누르세요');}
-  };
-  const canMove=()=>{if(board.includes(0))return true;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const v=board[r*4+c];if(c<3&&v===board[r*4+c+1])return true;if(r<3&&v===board[(r+1)*4+c])return true;}return false;};
-  const reset=()=>{board=Array(16).fill(0);score=0;won=false;addTile();addTile();render();};
-  $$('[data-dir]',gameStage).forEach(b=>b.addEventListener('click',()=>move(b.dataset.dir))); $('#reset2048').addEventListener('click',reset);
+    <div class="button-row"><button id="reset2048" class="secondary-btn" type="button">새 게임</button><button id="undo2048" class="secondary-btn" type="button">↶ 되돌리기</button><button id="toggleCheats2048" class="secondary-btn" type="button">치트 메뉴</button></div>
+    <div id="cheats2048" class="cheats2048" hidden>
+      <div class="cheat-row"><label for="tileValue2048">타일 숫자</label><select id="tileValue2048">${Array.from({length:20},(_,i)=>`<option value="${2**(i+1)}" ${i===0?'selected':''}>${2**(i+1)}</option>`).join('')}</select></div>
+      <div class="cheat-row"><button data-editmode="spawn" type="button">숫자 생성</button><button data-editmode="delete" type="button">타일 삭제</button><button data-editmode="edit" type="button">숫자 변경</button><button data-editmode="none" type="button">편집 종료</button></div>
+      <p id="editHint2048" class="cheat-hint">타일 편집 기능을 선택하세요.</p>
+      <div class="cheat-row"><label for="scoreInput2048">점수 변경</label><input id="scoreInput2048" type="number" min="0" step="1" value="0"><button id="applyScore2048" type="button">적용</button></div>
+      <div class="cheat-row"><label for="autoSpeed2048">자동 플레이 배속</label><select id="autoSpeed2048"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select><button id="autoToggle2048" type="button">자동 시작</button></div>
+      <label class="cheat-check"><input id="noGameOver2048" type="checkbox"> 게임 오버 방지 (막히면 공간 확보)</label>
+    </div></div>`;
+  const el=$('#b2048'),panel=$('#cheats2048'),fourChance={easy:.02,normal:.10,hard:.24}[difficulty];
+  const snapshot=()=>{history.push({board:board.slice(),score,won});};
+  const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null);if(free.length)board[free[randInt(0,free.length-1)]]=Math.random()<1-fourChance?2:4;};
+  const canMove=(b=board)=>{if(b.includes(0))return true;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const v=b[r*4+c];if(c<3&&v===b[r*4+c+1])return true;if(r<3&&v===b[(r+1)*4+c])return true;}return false;};
+  const render=()=>{el.innerHTML=board.map((v,i)=>`<div data-index="${i}" class="g2048-cell ${v?`v${Math.min(v,2048)}`:''} ${mode!=='none'?'cheat-editable':''}">${v||''}</div>`).join('');$('#s2048').textContent=score;const best=Math.max(getNum(KEYS.r2048),score);setNum(KEYS.r2048,best);$('#b2048Best').textContent=best;$('#scoreInput2048').value=score;$('#undo2048').disabled=!history.length;$$('[data-editmode]',panel).forEach(btn=>btn.classList.toggle('cheat-selected',btn.dataset.editmode===mode));};
+  const slideLine=line=>{let a=line.filter(Boolean),gained=0;for(let i=0;i<a.length-1;i++)if(a[i]===a[i+1]){a[i]*=2;gained+=a[i];a.splice(i+1,1);}while(a.length<4)a.push(0);return[a,gained];};
+  const simulate=(source,dir)=>{const result=source.slice();let gained=0;for(let i=0;i<4;i++){let idx=(dir==='left'||dir==='right')?[0,1,2,3].map(c=>i*4+c):[0,1,2,3].map(r=>r*4+i);if(dir==='right'||dir==='down')idx.reverse();const [vals,g]=slideLine(idx.map(k=>result[k]));gained+=g;idx.forEach((k,j)=>result[k]=vals[j]);}return {result,gained,changed:result.some((v,i)=>v!==source[i])};};
+  const preventDeadlock=()=>{if(!canMove()&&$('#noGameOver2048').checked){const smallest=Math.min(...board);const choices=board.map((v,i)=>v===smallest?i:-1).filter(i=>i>=0);board[choices[randInt(0,choices.length-1)]]=0;showToast('게임 오버 방지: 공간 확보');}};
+  const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
+  const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;render();};
+  const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;$('#autoToggle2048').textContent='자동 시작';};
+  const autoStep=()=>{if(paused||mode!=='none')return;const dirs=['up','left','right','down'];const options=dirs.map(dir=>({dir,...simulate(board,dir)})).filter(x=>x.changed);if(!options.length){if($('#noGameOver2048').checked){snapshot();preventDeadlock();render();}else stopAuto();return;}
+    const evaluate=x=>{const b=x.result,empty=b.filter(v=>!v).length,max=Math.max(...b);let smooth=0;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const i=r*4+c;if(c<3&&b[i]&&b[i+1])smooth-=Math.abs(Math.log2(b[i])-Math.log2(b[i+1]));if(r<3&&b[i]&&b[i+4])smooth-=Math.abs(Math.log2(b[i])-Math.log2(b[i+4]));}const corner=[b[0],b[3],b[12],b[15]].includes(max)?25:0;return empty*110+x.gained*0.8+smooth*2+corner+Math.random()*5;};
+    options.sort((a,b)=>evaluate(b)-evaluate(a));move(options[0].dir);};
+  const startAuto=()=>{stopAuto();mode='none';autoOn=true;$('#autoToggle2048').textContent='자동 정지';render();const speed=Number($('#autoSpeed2048').value);autoTimer=setInterval(autoStep,Math.max(25,300/speed));};
+  const reset=()=>{stopAuto();board=Array(16).fill(0);score=0;won=false;history=[];mode='none';addTile();addTile();render();};
+  $$('[data-dir]',gameStage).forEach(btn=>btn.addEventListener('click',()=>move(btn.dataset.dir)));
+  $('#reset2048').addEventListener('click',reset);$('#undo2048').addEventListener('click',undo);
+  $('#toggleCheats2048').addEventListener('click',()=>{panel.hidden=!panel.hidden;});
+  $$('[data-editmode]',panel).forEach(btn=>btn.addEventListener('click',()=>{stopAuto();mode=btn.dataset.editmode;$('#editHint2048').textContent=mode==='none'?'일반 이동 모드':mode==='spawn'?'빈 칸을 터치해 숫자를 생성하세요.':mode==='delete'?'삭제할 타일을 터치하세요.':'변경할 타일을 터치하세요.';render();}));
+  $('#applyScore2048').addEventListener('click',()=>{const value=Number($('#scoreInput2048').value);if(!Number.isSafeInteger(value)||value<0){showToast('0 이상의 정수 점수를 입력하세요.');return;}snapshot();score=value;render();});
+  $('#autoToggle2048').addEventListener('click',()=>autoOn?stopAuto():startAuto());$('#autoSpeed2048').addEventListener('change',()=>{if(autoOn)startAuto();});
+  $('#noGameOver2048').addEventListener('change',()=>{if($('#noGameOver2048').checked&&!canMove()){snapshot();preventDeadlock();render();}});
   let sx=0,sy=0,tracking=false;
-  const finishSwipe=(x,y)=>{if(!tracking)return;tracking=false;const dx=x-sx,dy=y-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));};
+  const finishSwipe=(x,y)=>{if(!tracking)return;tracking=false;if(mode!=='none')return;const dx=x-sx,dy=y-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));};
   const pd=e=>{tracking=true;sx=e.clientX;sy=e.clientY;el.setPointerCapture?.(e.pointerId);};
   const pu=e=>finishSwipe(e.clientX,e.clientY);
   const ts=e=>{if(e.pointerType)return;const t=e.touches[0];if(!t)return;tracking=true;sx=t.clientX;sy=t.clientY;e.preventDefault();};
   const te=e=>{if(e.pointerType)return;const t=e.changedTouches[0];if(!t)return;finishSwipe(t.clientX,t.clientY);e.preventDefault();};
   el.addEventListener('pointerdown',pd);el.addEventListener('pointerup',pu);el.addEventListener('pointercancel',()=>tracking=false);
   el.addEventListener('touchstart',ts,{passive:false});el.addEventListener('touchend',te,{passive:false});
-  const key=e=>{const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};if(map[e.key]){e.preventDefault();move(map[e.key]);}};document.addEventListener('keydown',key);
-  reset(); cleanupActive=()=>{document.removeEventListener('keydown',key);el.removeEventListener('touchstart',ts);el.removeEventListener('touchend',te);};
+  el.addEventListener('click',e=>{if(mode==='none'||paused)return;const cell=e.target.closest('[data-index]');if(!cell)return;const i=Number(cell.dataset.index),v=Number($('#tileValue2048').value);if(mode==='spawn'&&board[i]){showToast('빈 칸을 선택하세요.');return;}if(mode==='delete'&&!board[i])return;if(mode==='edit'&&!board[i]){showToast('기존 타일을 선택하세요.');return;}snapshot();board[i]=mode==='delete'?0:v;preventDeadlock();render();});
+  const key=e=>{const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};if(map[e.key]&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();move(map[e.key]);}};document.addEventListener('keydown',key);
+  reset();cleanupActive=()=>{stopAuto();document.removeEventListener('keydown',key);el.removeEventListener('touchstart',ts);el.removeEventListener('touchend',te);};
 }
 
 /* ---------- Snake ---------- */

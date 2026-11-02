@@ -84,3 +84,15 @@ body.s24-mode .mines-toolbar{margin-bottom:8px}body.s24-mode .mines-grid{gap:3px
 body.s24-mode .memory-grid{gap:6px}body.s24-mode .memory-card{border-radius:10px}
 @media (orientation:landscape){body.s24-mode .app-shell{width:min(100%,1000px)}body.s24-mode .game-grid{grid-template-columns:repeat(4,minmax(0,1fr))}body.s24-mode .game-card{min-height:112px}body.s24-mode .game-canvas{max-height:calc(100dvh - 145px)}}
 @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+/* 2048 cheat controls */
+.cheats2048{margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--card2)}
+.cheats2048[hidden]{display:none!important}
+.cheat-row{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.cheat-row label{font-weight:700;font-size:13px}
+.cheat-row button,.cheat-row select,.cheat-row input{border:1px solid var(--line);border-radius:9px;padding:9px;background:var(--card);color:inherit;min-height:40px}
+.cheat-row input{width:120px;max-width:100%}
+.cheat-row button.cheat-selected{outline:2px solid #56d4b0}
+.cheat-hint{font-size:13px;opacity:.85;margin:6px 0 14px}
+.cheat-check{display:flex;gap:8px;align-items:center;font-size:14px}
+.g2048-cell.cheat-editable{cursor:pointer;outline:1px dashed rgba(255,255,255,.3)}
