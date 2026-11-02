@@ -164,12 +164,12 @@ function init2048(){
   const spawnDistribution=()=>{const base=$('#scaleSpawn2048').checked?minSpawn():2;const upper=base*2;return [[base,Number.isFinite(upper)?1-fourChance:1],...(Number.isFinite(upper)?[[upper,fourChance]]:[])];};
   const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null);if(free.length){const dist=spawnDistribution();board[free[randInt(0,free.length-1)]]=dist.length===1||Math.random()>=fourChance?dist[0][0]:dist[1][0];}};
   const canMove=(b=board)=>{if(b.includes(0))return true;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const v=b[r*4+c];if(c<3&&v===b[r*4+c+1])return true;if(r<3&&v===b[(r+1)*4+c])return true;}return false;};
-  const render=()=>{el.innerHTML=board.map((v,i)=>`<div data-index="${i}" class="g2048-cell ${v?`v${Math.min(v,2048)}`:''} ${mode!=='none'?'cheat-editable':''}">${v||''}</div>`).join('');$('#s2048').textContent=score;const best=Math.max(getNum(KEYS.r2048),score);setNum(KEYS.r2048,best);$('#b2048Best').textContent=best;$('#scoreInput2048').value=score;$('#undo2048').disabled=!history.length;$('#spawnFloor2048').textContent='현재 점수 '+score.toLocaleString()+'점 · 새 타일: '+spawnDistribution().map(([v,p])=>v+' ('+Math.round(p*100)+'%)').join(' / ')+' · 다음 단계 '+(nextThreshold()?.toLocaleString()??'표현 가능한 점수 한계')+'점';$$('[data-editmode]',panel).forEach(btn=>btn.classList.toggle('cheat-selected',btn.dataset.editmode===mode));};
+  const render=()=>{clearObsoleteTiles();el.innerHTML=board.map((v,i)=>`<div data-index="${i}" class="g2048-cell ${v?`v${Math.min(v,2048)}`:''} ${mode!=='none'?'cheat-editable':''}">${v||''}</div>`).join('');$('#s2048').textContent=score;const best=Math.max(getNum(KEYS.r2048),score);setNum(KEYS.r2048,best);$('#b2048Best').textContent=best;$('#scoreInput2048').value=score;$('#undo2048').disabled=!history.length;$('#spawnFloor2048').textContent='현재 점수 '+score.toLocaleString()+'점 · 새 타일: '+spawnDistribution().map(([v,p])=>v+' ('+Math.round(p*100)+'%)').join(' / ')+' · 다음 단계 '+(nextThreshold()?.toLocaleString()??'표현 가능한 점수 한계')+'점';$$('[data-editmode]',panel).forEach(btn=>btn.classList.toggle('cheat-selected',btn.dataset.editmode===mode));};
   const slideLine=line=>{let a=line.filter(Boolean),gained=0;for(let i=0;i<a.length-1;i++)if(a[i]===a[i+1]){a[i]*=2;gained+=a[i];a.splice(i+1,1);}while(a.length<4)a.push(0);return[a,gained];};
   const simulate=(source,dir)=>{const result=source.slice();let gained=0;for(let i=0;i<4;i++){let idx=(dir==='left'||dir==='right')?[0,1,2,3].map(c=>i*4+c):[0,1,2,3].map(r=>r*4+i);if(dir==='right'||dir==='down')idx.reverse();const [vals,g]=slideLine(idx.map(k=>result[k]));gained+=g;idx.forEach((k,j)=>result[k]=vals[j]);}return {result,gained,changed:result.some((v,i)=>v!==source[i])};};
   const preventDeadlock=()=>{if(!canMove()&&$('#noGameOver2048').checked){const smallest=Math.min(...board);const choices=board.map((v,i)=>v===smallest?i:-1).filter(i=>i>=0);board[choices[randInt(0,choices.length-1)]]=0;showToast('게임 오버 방지: 공간 확보');}};
   const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;clearObsoleteTiles();addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
-  const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;render();};
+  const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;clearObsoleteTiles();render();};
   const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;autoBudget=0;$('#autoToggle2048').textContent='자동 시작';};
   // Expectimax: evaluate possible moves and random 2/4 spawns, not just immediate merges.
   const directions=['up','left','right','down'];
@@ -267,7 +267,7 @@ function init2048(){
     if(mode==='spawn'&&board[i]){showToast('빈 칸을 선택하세요.');return;}
     if(mode==='delete'&&!board[i]){showToast('삭제할 숫자 타일을 선택하세요.');return;}
     if(!['spawn','delete','edit'].includes(mode))return;
-    snapshot();board[i]=mode==='delete'?0:v;preventDeadlock();render();
+    snapshot();board[i]=mode==='delete'?0:v;clearObsoleteTiles();preventDeadlock();render();
     $('#editHint2048').textContent=`${i+1}번 칸 ${mode==='delete'?'삭제':mode==='spawn'?'생성':'변경'} 완료 · 계속 다른 칸을 선택할 수 있습니다.`;
   };
   let suppressClick=false;
