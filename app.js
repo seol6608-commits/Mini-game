@@ -133,7 +133,7 @@ document.addEventListener('visibilitychange',()=>{ if(document.hidden && activeG
 
 /* ---------- 2048 ---------- */
 function init2048(){
-  let board=Array(16).fill(0),score=0,won=false,history=[],mode='none',autoTimer=null,autoOn=false;
+  let board=Array(16).fill(0),score=0,won=false,history=[],mode='none',autoTimer=null,autoOn=false,autoLast=0,autoBudget=0;
   setStats(stat('SCORE','0','s2048')+stat('BEST',getNum(KEYS.r2048),'b2048Best'));
   gameStage.innerHTML=`<div class="g2048-wrap"><div id="b2048" class="g2048-board" aria-label="2048 보드"></div>
     <div class="swipe-pad" aria-label="방향 조작"><span class="blank"></span><button data-dir="up">▲</button><span class="blank"></span><button data-dir="left">◀</button><button data-dir="down">▼</button><button data-dir="right">▶</button></div>
@@ -143,7 +143,7 @@ function init2048(){
       <div class="cheat-row"><button data-editmode="spawn" type="button">숫자 생성</button><button data-editmode="delete" type="button">타일 삭제</button><button data-editmode="edit" type="button">숫자 변경</button><button data-editmode="none" type="button">편집 종료</button></div>
       <p id="editHint2048" class="cheat-hint">타일 편집 기능을 선택하세요.</p>
       <div class="cheat-row"><label for="scoreInput2048">점수 변경</label><input id="scoreInput2048" type="number" min="0" step="1" value="0"><button id="applyScore2048" type="button">적용</button></div>
-      <div class="cheat-row"><label for="autoSpeed2048">자동 플레이 배속</label><select id="autoSpeed2048"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option></select><button id="autoToggle2048" type="button">자동 시작</button></div>
+      <div class="cheat-row"><label for="autoSpeed2048">자동 플레이 배속</label><select id="autoSpeed2048"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option><option value="50">50×</option><option value="100">100×</option><option value="200">200×</option><option value="500">500×</option></select><button id="autoToggle2048" type="button">자동 시작</button></div>
       <label class="cheat-check"><input id="noGameOver2048" type="checkbox"> 게임 오버 방지 (막히면 공간 확보)</label>
     </div></div>`;
   const el=$('#b2048'),panel=$('#cheats2048'),fourChance={easy:.02,normal:.10,hard:.24}[difficulty];
@@ -156,7 +156,7 @@ function init2048(){
   const preventDeadlock=()=>{if(!canMove()&&$('#noGameOver2048').checked){const smallest=Math.min(...board);const choices=board.map((v,i)=>v===smallest?i:-1).filter(i=>i>=0);board[choices[randInt(0,choices.length-1)]]=0;showToast('게임 오버 방지: 공간 확보');}};
   const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
   const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;render();};
-  const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;$('#autoToggle2048').textContent='자동 시작';};
+  const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;autoBudget=0;$('#autoToggle2048').textContent='자동 시작';};
   // Expectimax: evaluate possible moves and random 2/4 spawns, not just immediate merges.
   const directions=['up','left','right','down'];
   const evaluateBoard=b=>{
@@ -188,10 +188,25 @@ function init2048(){
     const options=directions.map(dir=>({dir,...simulate(board,dir)})).filter(x=>x.changed);
     if(!options.length){if($('#noGameOver2048').checked){snapshot();preventDeadlock();render();}else stopAuto();return;}
     let best=null,bestValue=-Infinity;
-    for(const option of options){const value=option.gained*0.8+expectimax(option.result,3,true);if(value>bestValue){bestValue=value;best=option;}}
+    for(const option of options){const speed=Number($('#autoSpeed2048').value);const value=option.gained*0.8+(speed>=50?evaluateBoard(option.result):expectimax(option.result,3,true));if(value>bestValue){bestValue=value;best=option;}}
     if(best)move(best.dir);
   };
-  const startAuto=()=>{stopAuto();mode='none';autoOn=true;$('#autoToggle2048').textContent='자동 정지';render();const speed=Number($('#autoSpeed2048').value);autoTimer=setInterval(autoStep,Math.max(25,300/speed));};
+  const startAuto=()=>{
+    stopAuto();mode='none';autoOn=true;$('#autoToggle2048').textContent='자동 정지';render();
+    autoLast=performance.now();autoBudget=0;
+    // Batch fast moves, with a bounded time slice to keep touch/UI responsive.
+    autoTimer=setInterval(()=>{
+      if(!autoOn)return;
+      const now=performance.now(),elapsed=Math.min(now-autoLast,1000);autoLast=now;
+      if(paused)return;
+      const speed=Number($('#autoSpeed2048').value);
+      autoBudget=Math.min(40,autoBudget+elapsed*speed/300);
+      const start=performance.now();let steps=0;
+      while(autoOn&&autoBudget>=1&&steps<40&&performance.now()-start<12){
+        autoStep();autoBudget--;steps++;
+      }
+    },16);
+  };
   const reset=()=>{stopAuto();board=Array(16).fill(0);score=0;won=false;history=[];mode='none';addTile();addTile();render();};
   $$('[data-dir]',gameStage).forEach(btn=>btn.addEventListener('click',()=>move(btn.dataset.dir)));
   $('#reset2048').addEventListener('click',reset);$('#undo2048').addEventListener('click',undo);
