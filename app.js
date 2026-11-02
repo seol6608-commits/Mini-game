@@ -144,18 +144,31 @@ function init2048(){
       <p id="editHint2048" class="cheat-hint">타일 편집 기능을 선택하세요.</p>
       <div class="cheat-row"><label for="scoreInput2048">점수 변경</label><input id="scoreInput2048" type="number" min="0" step="1" value="0"><button id="applyScore2048" type="button">적용</button></div>
       <div class="cheat-row"><label for="autoSpeed2048">자동 플레이 배속</label><select id="autoSpeed2048"><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option><option value="20">20×</option><option value="50">50×</option><option value="100">100×</option><option value="200">200×</option><option value="500">500×</option></select><button id="autoToggle2048" type="button">자동 시작</button></div>
-      <label class="cheat-check"><input id="scaleSpawn2048" type="checkbox" checked> 점수에 따라 낮은 숫자 생성 중단</label><p id="spawnFloor2048" class="cheat-hint"></p><label class="cheat-check"><input id="noGameOver2048" type="checkbox"> 게임 오버 방지 (막히면 공간 확보)</label>
+      <label class="cheat-check"><input id="scaleSpawn2048" type="checkbox" checked> 500점부터 낮은 타일 자동 제거 · 점수에 따라 무제한 단계 상승</label><p id="spawnFloor2048" class="cheat-hint"></p><label class="cheat-check"><input id="noGameOver2048" type="checkbox"> 게임 오버 방지 (막히면 공간 확보)</label>
     </div></div>`;
   const el=$('#b2048'),panel=$('#cheats2048'),fourChance={easy:.02,normal:.10,hard:.24}[difficulty];
   const snapshot=()=>{history.push({board:board.slice(),score,won});};
-  const minSpawn=()=>{const thresholds=[0,2000,8000,30000,100000,350000,1000000,3000000,10000000,30000000,100000000];let level=0;for(let i=0;i<thresholds.length;i++)if(score>=thresholds[i])level=i;return 2**(level+1);};
-  const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null);if(free.length)board[free[randInt(0,free.length-1)]]=($('#scaleSpawn2048').checked?minSpawn():2)*(Math.random()<1-fourChance?1:2);};
+  // Every 4x increase in the threshold advances the minimum tile by one power of two.
+  // 0..499 => 2; 500..1999 => 4; 2000..7999 => 8; etc.
+  // JavaScript Numbers have a finite representable range; clamp before overflow.
+  const spawnLevel=points=>points<500?0:Math.max(1,Math.floor(Math.log2(points/500)/2)+1);
+  const spawnFloorForScore=points=>2**Math.min(1022,spawnLevel(points)+1);
+  const minSpawn=()=>spawnFloorForScore(score);
+  const clearObsoleteTiles=()=>{
+    if(!$('#scaleSpawn2048').checked)return 0;
+    const floor=minSpawn();let removed=0;
+    for(let i=0;i<board.length;i++)if(board[i]&&board[i]<floor){board[i]=0;removed++;}
+    return removed;
+  };
+  const nextThreshold=()=>{const level=spawnLevel(score);const next=500*4**level;return Number.isFinite(next)?next:null;};
+  const spawnDistribution=()=>{const base=$('#scaleSpawn2048').checked?minSpawn():2;const upper=base*2;return [[base,Number.isFinite(upper)?1-fourChance:1],...(Number.isFinite(upper)?[[upper,fourChance]]:[])];};
+  const addTile=()=>{const free=board.map((v,i)=>v?null:i).filter(v=>v!==null);if(free.length){const dist=spawnDistribution();board[free[randInt(0,free.length-1)]]=dist.length===1||Math.random()>=fourChance?dist[0][0]:dist[1][0];}};
   const canMove=(b=board)=>{if(b.includes(0))return true;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const v=b[r*4+c];if(c<3&&v===b[r*4+c+1])return true;if(r<3&&v===b[(r+1)*4+c])return true;}return false;};
-  const render=()=>{el.innerHTML=board.map((v,i)=>`<div data-index="${i}" class="g2048-cell ${v?`v${Math.min(v,2048)}`:''} ${mode!=='none'?'cheat-editable':''}">${v||''}</div>`).join('');$('#s2048').textContent=score;const best=Math.max(getNum(KEYS.r2048),score);setNum(KEYS.r2048,best);$('#b2048Best').textContent=best;$('#scoreInput2048').value=score;$('#undo2048').disabled=!history.length;$('#spawnFloor2048').textContent='현재 자동 생성 최소 숫자: '+($('#scaleSpawn2048').checked?minSpawn():2);$$('[data-editmode]',panel).forEach(btn=>btn.classList.toggle('cheat-selected',btn.dataset.editmode===mode));};
+  const render=()=>{el.innerHTML=board.map((v,i)=>`<div data-index="${i}" class="g2048-cell ${v?`v${Math.min(v,2048)}`:''} ${mode!=='none'?'cheat-editable':''}">${v||''}</div>`).join('');$('#s2048').textContent=score;const best=Math.max(getNum(KEYS.r2048),score);setNum(KEYS.r2048,best);$('#b2048Best').textContent=best;$('#scoreInput2048').value=score;$('#undo2048').disabled=!history.length;$('#spawnFloor2048').textContent='현재 점수 '+score.toLocaleString()+'점 · 새 타일: '+spawnDistribution().map(([v,p])=>v+' ('+Math.round(p*100)+'%)').join(' / ')+' · 다음 단계 '+(nextThreshold()?.toLocaleString()??'표현 가능한 점수 한계')+'점';$$('[data-editmode]',panel).forEach(btn=>btn.classList.toggle('cheat-selected',btn.dataset.editmode===mode));};
   const slideLine=line=>{let a=line.filter(Boolean),gained=0;for(let i=0;i<a.length-1;i++)if(a[i]===a[i+1]){a[i]*=2;gained+=a[i];a.splice(i+1,1);}while(a.length<4)a.push(0);return[a,gained];};
   const simulate=(source,dir)=>{const result=source.slice();let gained=0;for(let i=0;i<4;i++){let idx=(dir==='left'||dir==='right')?[0,1,2,3].map(c=>i*4+c):[0,1,2,3].map(r=>r*4+i);if(dir==='right'||dir==='down')idx.reverse();const [vals,g]=slideLine(idx.map(k=>result[k]));gained+=g;idx.forEach((k,j)=>result[k]=vals[j]);}return {result,gained,changed:result.some((v,i)=>v!==source[i])};};
   const preventDeadlock=()=>{if(!canMove()&&$('#noGameOver2048').checked){const smallest=Math.min(...board);const choices=board.map((v,i)=>v===smallest?i:-1).filter(i=>i>=0);board[choices[randInt(0,choices.length-1)]]=0;showToast('게임 오버 방지: 공간 확보');}};
-  const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
+  const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;clearObsoleteTiles();addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
   const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;render();};
   const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;autoBudget=0;$('#autoToggle2048').textContent='자동 시작';};
   // Expectimax: evaluate possible moves and random 2/4 spawns, not just immediate merges.
@@ -198,8 +211,7 @@ function init2048(){
         for(let k=0;k<count;k++)sample.push(free[Math.floor((k+.5)*free.length/count)]);
         let total=0;
         for(const i of sample){
-          b[i]=2;total+=(1-fourChance)*expectimax(b,depth-1,false,ctx);
-          b[i]=4;total+=fourChance*expectimax(b,depth-1,false,ctx);b[i]=0;
+          for(const [tile,probability] of ctx.spawnDist){b[i]=tile;total+=probability*expectimax(b,depth-1,false,ctx);}b[i]=0;
         }
         result=total/count;
       }
@@ -215,7 +227,7 @@ function init2048(){
     // Adaptive search: 500x still forecasts tile spawns and subsequent moves.
     const depth=speed>=200?2:speed>=50?3:4;
     const samples=speed>=500?3:speed>=200?4:speed>=50?5:7;
-    const ctx={samples,cache:new Map()};
+    const ctx={samples,cache:new Map(),spawnDist:spawnDistribution()};
     let best=null,bestValue=-Infinity;
     for(const option of options){
       const value=option.gained*0.8+expectimax(option.result,depth,true,ctx);
@@ -244,9 +256,9 @@ function init2048(){
   $('#reset2048').addEventListener('click',reset);$('#undo2048').addEventListener('click',undo);
   $('#toggleCheats2048').addEventListener('click',()=>{panel.hidden=!panel.hidden;});
   $$('[data-editmode]',panel).forEach(btn=>btn.addEventListener('click',()=>{stopAuto();mode=btn.dataset.editmode;$('#editHint2048').textContent=mode==='none'?'일반 이동 모드':mode==='spawn'?'빈 칸을 터치해 숫자를 생성하세요.':mode==='delete'?'삭제할 타일을 터치하세요.':'변경할 타일을 터치하세요.';render();}));
-  $('#applyScore2048').addEventListener('click',()=>{const value=Number($('#scoreInput2048').value);if(!Number.isSafeInteger(value)||value<0){showToast('0 이상의 정수 점수를 입력하세요.');return;}snapshot();score=value;render();});
+  $('#applyScore2048').addEventListener('click',()=>{const value=Number($('#scoreInput2048').value);if(!Number.isSafeInteger(value)||value<0){showToast('0 이상의 정수 점수를 입력하세요.');return;}snapshot();score=value;clearObsoleteTiles();render();});
   $('#autoToggle2048').addEventListener('click',()=>autoOn?stopAuto():startAuto());$('#autoSpeed2048').addEventListener('change',()=>{if(autoOn)startAuto();});
-  $('#scaleSpawn2048').addEventListener('change',render);$('#noGameOver2048').addEventListener('change',()=>{if($('#noGameOver2048').checked&&!canMove()){snapshot();preventDeadlock();render();}});
+  $('#scaleSpawn2048').addEventListener('change',()=>{snapshot();clearObsoleteTiles();render();});$('#noGameOver2048').addEventListener('change',()=>{if($('#noGameOver2048').checked&&!canMove()){snapshot();preventDeadlock();render();}});
   let sx=0,sy=0,tracking=false;
   const finishSwipe=(x,y)=>{if(!tracking)return;tracking=false;if(mode!=='none')return;const dx=x-sx,dy=y-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));};
   const editCell=i=>{
