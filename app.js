@@ -173,22 +173,53 @@ function init2048(){
     const max=Math.max(...b),corners=[0,3,12,15];
     return snake*3.5+empty*125+smooth*7+merges*18+(corners.some(i=>b[i]===max)?Math.log2(max||1)*22:0);
   };
-  const expectimax=(b,depth,chance)=>{
+  // Bounded expectimax for every speed, including 500x. High speeds
+  // retain chance-node lookahead instead of falling back to greedy moves.
+  const expectimax=(b,depth,chance,ctx)=>{
     if(depth<=0)return evaluateBoard(b);
-    if(!chance){let best=-Infinity;for(const dir of directions){const m=simulate(b,dir);if(m.changed)best=Math.max(best,m.gained*0.8+expectimax(m.result,depth-1,true));}return best===-Infinity?evaluateBoard(b)-1500:best;}
-    const free=[];for(let i=0;i<16;i++)if(!b[i])free.push(i);
-    if(!free.length)return expectimax(b,depth-1,false);
-    // Deterministic sampling at high occupancy keeps 20x mode responsive.
-    const sample=free.length>6?free.filter((_,i)=>i%Math.ceil(free.length/6)===0):free;
-    let total=0;for(const i of sample){b[i]=2;total+=(1-fourChance)*expectimax(b,depth-1,false);b[i]=4;total+=fourChance*expectimax(b,depth-1,false);b[i]=0;}
-    return total/sample.length;
+    const key=depth+':'+(chance?'C':'M')+':'+b.join(',');
+    if(ctx.cache.has(key))return ctx.cache.get(key);
+    let result;
+    if(!chance){
+      let best=-Infinity;
+      for(const dir of directions){
+        const m=simulate(b,dir);
+        if(m.changed)best=Math.max(best,m.gained*0.8+expectimax(m.result,depth-1,true,ctx));
+      }
+      result=best===-Infinity?evaluateBoard(b)-1500:best;
+    }else{
+      const free=[];for(let i=0;i<16;i++)if(!b[i])free.push(i);
+      if(!free.length)result=expectimax(b,depth-1,false,ctx);
+      else{
+        // Sample spatially distributed empty cells for a predictable budget.
+        const count=Math.min(free.length,ctx.samples);
+        const sample=[];
+        for(let k=0;k<count;k++)sample.push(free[Math.floor((k+.5)*free.length/count)]);
+        let total=0;
+        for(const i of sample){
+          b[i]=2;total+=(1-fourChance)*expectimax(b,depth-1,false,ctx);
+          b[i]=4;total+=fourChance*expectimax(b,depth-1,false,ctx);b[i]=0;
+        }
+        result=total/count;
+      }
+    }
+    if(ctx.cache.size<4000)ctx.cache.set(key,result);
+    return result;
   };
   const autoStep=()=>{
     if(paused||mode!=='none')return;
     const options=directions.map(dir=>({dir,...simulate(board,dir)})).filter(x=>x.changed);
     if(!options.length){if($('#noGameOver2048').checked){snapshot();preventDeadlock();render();}else stopAuto();return;}
+    const speed=Number($('#autoSpeed2048').value);
+    // Adaptive search: 500x still forecasts tile spawns and subsequent moves.
+    const depth=speed>=200?2:speed>=50?3:4;
+    const samples=speed>=500?3:speed>=200?4:speed>=50?5:7;
+    const ctx={samples,cache:new Map()};
     let best=null,bestValue=-Infinity;
-    for(const option of options){const speed=Number($('#autoSpeed2048').value);const value=option.gained*0.8+(speed>=50?evaluateBoard(option.result):expectimax(option.result,3,true));if(value>bestValue){bestValue=value;best=option;}}
+    for(const option of options){
+      const value=option.gained*0.8+expectimax(option.result,depth,true,ctx);
+      if(value>bestValue){bestValue=value;best=option;}
+    }
     if(best)move(best.dir);
   };
   const startAuto=()=>{
