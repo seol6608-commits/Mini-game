@@ -157,9 +157,40 @@ function init2048(){
   const move=dir=>{if(paused)return false;const next=simulate(board,dir);if(!next.changed)return false;snapshot();board=next.result;score+=next.gained;addTile();preventDeadlock();render();if(!won&&board.some(v=>v>=2048)){won=true;showToast('2048 달성');}if(!canMove())showToast('게임 오버 · 되돌리기 또는 새 게임');return true;};
   const undo=()=>{if(!history.length)return;const prev=history.pop();board=prev.board;score=prev.score;won=prev.won;render();};
   const stopAuto=()=>{autoOn=false;clearInterval(autoTimer);autoTimer=null;$('#autoToggle2048').textContent='자동 시작';};
-  const autoStep=()=>{if(paused||mode!=='none')return;const dirs=['up','left','right','down'];const options=dirs.map(dir=>({dir,...simulate(board,dir)})).filter(x=>x.changed);if(!options.length){if($('#noGameOver2048').checked){snapshot();preventDeadlock();render();}else stopAuto();return;}
-    const evaluate=x=>{const b=x.result,empty=b.filter(v=>!v).length,max=Math.max(...b);let smooth=0;for(let r=0;r<4;r++)for(let c=0;c<4;c++){const i=r*4+c;if(c<3&&b[i]&&b[i+1])smooth-=Math.abs(Math.log2(b[i])-Math.log2(b[i+1]));if(r<3&&b[i]&&b[i+4])smooth-=Math.abs(Math.log2(b[i])-Math.log2(b[i+4]));}const corner=[b[0],b[3],b[12],b[15]].includes(max)?25:0;return empty*110+x.gained*0.8+smooth*2+corner+Math.random()*5;};
-    options.sort((a,b)=>evaluate(b)-evaluate(a));move(options[0].dir);};
+  // Expectimax: evaluate possible moves and random 2/4 spawns, not just immediate merges.
+  const directions=['up','left','right','down'];
+  const evaluateBoard=b=>{
+    const logs=b.map(v=>v?Math.log2(v):0),empty=b.filter(v=>!v).length;
+    const paths=[[0,1,2,3,7,6,5,4,8,9,10,11,15,14,13,12],[3,2,1,0,4,5,6,7,11,10,9,8,12,13,14,15],[12,13,14,15,11,10,9,8,4,5,6,7,3,2,1,0],[15,14,13,12,8,9,10,11,7,6,5,4,0,1,2,3]];
+    const weights=[16,15,14,13,9,10,11,12,8,7,6,5,1,2,3,4];
+    const snake=Math.max(...paths.map(path=>path.reduce((sum,idx,j)=>sum+logs[idx]*weights[j],0)));
+    let smooth=0,merges=0;
+    for(let i=0;i<16;i++){
+      for(const j of [i%4<3?i+1:-1,i<12?i+4:-1])if(j>=0&&b[i]&&b[j]){
+        smooth-=Math.abs(logs[i]-logs[j]);if(b[i]===b[j])merges++;
+      }
+    }
+    const max=Math.max(...b),corners=[0,3,12,15];
+    return snake*3.5+empty*125+smooth*7+merges*18+(corners.some(i=>b[i]===max)?Math.log2(max||1)*22:0);
+  };
+  const expectimax=(b,depth,chance)=>{
+    if(depth<=0)return evaluateBoard(b);
+    if(!chance){let best=-Infinity;for(const dir of directions){const m=simulate(b,dir);if(m.changed)best=Math.max(best,m.gained*0.8+expectimax(m.result,depth-1,true));}return best===-Infinity?evaluateBoard(b)-1500:best;}
+    const free=[];for(let i=0;i<16;i++)if(!b[i])free.push(i);
+    if(!free.length)return expectimax(b,depth-1,false);
+    // Deterministic sampling at high occupancy keeps 20x mode responsive.
+    const sample=free.length>6?free.filter((_,i)=>i%Math.ceil(free.length/6)===0):free;
+    let total=0;for(const i of sample){b[i]=2;total+=(1-fourChance)*expectimax(b,depth-1,false);b[i]=4;total+=fourChance*expectimax(b,depth-1,false);b[i]=0;}
+    return total/sample.length;
+  };
+  const autoStep=()=>{
+    if(paused||mode!=='none')return;
+    const options=directions.map(dir=>({dir,...simulate(board,dir)})).filter(x=>x.changed);
+    if(!options.length){if($('#noGameOver2048').checked){snapshot();preventDeadlock();render();}else stopAuto();return;}
+    let best=null,bestValue=-Infinity;
+    for(const option of options){const value=option.gained*0.8+expectimax(option.result,3,true);if(value>bestValue){bestValue=value;best=option;}}
+    if(best)move(best.dir);
+  };
   const startAuto=()=>{stopAuto();mode='none';autoOn=true;$('#autoToggle2048').textContent='자동 정지';render();const speed=Number($('#autoSpeed2048').value);autoTimer=setInterval(autoStep,Math.max(25,300/speed));};
   const reset=()=>{stopAuto();board=Array(16).fill(0);score=0;won=false;history=[];mode='none';addTile();addTile();render();};
   $$('[data-dir]',gameStage).forEach(btn=>btn.addEventListener('click',()=>move(btn.dataset.dir)));
@@ -171,15 +202,30 @@ function init2048(){
   $('#noGameOver2048').addEventListener('change',()=>{if($('#noGameOver2048').checked&&!canMove()){snapshot();preventDeadlock();render();}});
   let sx=0,sy=0,tracking=false;
   const finishSwipe=(x,y)=>{if(!tracking)return;tracking=false;if(mode!=='none')return;const dx=x-sx,dy=y-sy;if(Math.max(Math.abs(dx),Math.abs(dy))<20)return;move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));};
-  const pd=e=>{tracking=true;sx=e.clientX;sy=e.clientY;el.setPointerCapture?.(e.pointerId);};
-  const pu=e=>finishSwipe(e.clientX,e.clientY);
-  const ts=e=>{if(e.pointerType)return;const t=e.touches[0];if(!t)return;tracking=true;sx=t.clientX;sy=t.clientY;e.preventDefault();};
-  const te=e=>{if(e.pointerType)return;const t=e.changedTouches[0];if(!t)return;finishSwipe(t.clientX,t.clientY);e.preventDefault();};
+  const editCell=i=>{
+    if(mode==='none'||paused||i<0||i>15)return;
+    const v=Number($('#tileValue2048').value);
+    if(mode==='spawn'&&board[i]){showToast('빈 칸을 선택하세요.');return;}
+    if(mode==='delete'&&!board[i]){showToast('삭제할 숫자 타일을 선택하세요.');return;}
+    if(!['spawn','delete','edit'].includes(mode))return;
+    snapshot();board[i]=mode==='delete'?0:v;preventDeadlock();render();
+    $('#editHint2048').textContent=`${i+1}번 칸 ${mode==='delete'?'삭제':mode==='spawn'?'생성':'변경'} 완료 · 계속 다른 칸을 선택할 수 있습니다.`;
+  };
+  let suppressClick=false;
+  const pd=e=>{tracking=true;sx=e.clientX;sy=e.clientY;};
+  const pu=e=>{
+    if(!tracking)return;
+    const dx=e.clientX-sx,dy=e.clientY-sy;
+    if(mode!=='none'&&Math.hypot(dx,dy)<16){
+      const cell=e.target.closest('[data-index]');if(cell)editCell(Number(cell.dataset.index));
+      suppressClick=true;
+    }else finishSwipe(e.clientX,e.clientY);
+    tracking=false;
+  };
   el.addEventListener('pointerdown',pd);el.addEventListener('pointerup',pu);el.addEventListener('pointercancel',()=>tracking=false);
-  el.addEventListener('touchstart',ts,{passive:false});el.addEventListener('touchend',te,{passive:false});
-  el.addEventListener('click',e=>{if(mode==='none'||paused)return;const cell=e.target.closest('[data-index]');if(!cell)return;const i=Number(cell.dataset.index),v=Number($('#tileValue2048').value);if(mode==='spawn'&&board[i]){showToast('빈 칸을 선택하세요.');return;}if(mode==='delete'&&!board[i])return;if(mode==='edit'&&!board[i]){showToast('기존 타일을 선택하세요.');return;}snapshot();board[i]=mode==='delete'?0:v;preventDeadlock();render();});
+  el.addEventListener('click',e=>{if(suppressClick){suppressClick=false;return;}if(mode==='none')return;const cell=e.target.closest('[data-index]');if(cell)editCell(Number(cell.dataset.index));});
   const key=e=>{const map={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};if(map[e.key]&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement.tagName)){e.preventDefault();move(map[e.key]);}};document.addEventListener('keydown',key);
-  reset();cleanupActive=()=>{stopAuto();document.removeEventListener('keydown',key);el.removeEventListener('touchstart',ts);el.removeEventListener('touchend',te);};
+  reset();cleanupActive=()=>{stopAuto();document.removeEventListener('keydown',key);};
 }
 
 /* ---------- Snake ---------- */
